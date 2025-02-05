@@ -1,21 +1,29 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using Octokit;
-using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 public class CachedGitHubService : IGitHubService
 {
     private readonly IMemoryCache _cache;
+    private readonly IGitHubService _gitHubService;
+    private readonly GitHubClient _client;
 
-    public CachedGitHubService(IMemoryCache cache, IOptions<GitHubSettings> options)
-        : base(options)
+    public CachedGitHubService(IGitHubService gitHubService, IMemoryCache memoryCache, GitHubClient client)
     {
-        _cache = cache;
+        _gitHubService = gitHubService;
+        _cache = memoryCache;
+        _client = client;
     }
 
-    public async Task<IReadOnlyList<Repository>> GetUserRepositoriesWithCache(string username)
+    public Task<List<RepositoryDetails>> GetRepositoryDetails(string username)
+    {
+        return _gitHubService.GetRepositoryDetails(username);
+    }
+
+    public async Task<IReadOnlyList<Repository>> GetUserRepositories(string username)
     {
         if (_cache.TryGetValue(username, out (IReadOnlyList<Repository> Repos, DateTime LastUpdated) cachedData))
         {
@@ -27,16 +35,16 @@ public class CachedGitHubService : IGitHubService
             }
             else
             {
-                return cachedData.Repos; 
+                return cachedData.Repos;
             }
         }
 
-        var repos = await base.GetUserRepositories(username);
+        var repos = await _gitHubService.GetUserRepositories(username);
         DateTime latestCommit = await GetLastCommitDate(username);
 
         var cacheEntryOptions = new MemoryCacheEntryOptions
         {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1) 
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
         };
         _cache.Set(username, (repos, latestCommit), cacheEntryOptions);
 
@@ -47,10 +55,10 @@ public class CachedGitHubService : IGitHubService
     {
         var events = await _client.Activity.Events.GetAllUserPerformed(username);
         var lastCommitEvent = events
-            .Where(e => e.Type == "PushEvent") 
-            .OrderByDescending(e => e.CreatedAt) 
+            .Where(e => e.Type == "PushEvent")
+            .OrderByDescending(e => e.CreatedAt)
             .FirstOrDefault();
 
-        return lastCommitEvent?.CreatedAt ?? DateTime.MinValue;
+        return lastCommitEvent?.CreatedAt.UtcDateTime ?? DateTime.MinValue;
     }
 }

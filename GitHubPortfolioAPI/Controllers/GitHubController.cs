@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 [ApiController]
 public class GitHubController : ControllerBase
 {
-    private readonly GitHubService _gitHubService;
+    private readonly IGitHubService _gitHubService;
 
     public GitHubController(GitHubService gitHubService)
     {
@@ -18,11 +18,11 @@ public class GitHubController : ControllerBase
         var repos = await _gitHubService.GetUserRepositories(username);
         return Ok(repos);
     }
+
     [HttpGet("search")]
     public async Task<IActionResult> SearchRepositories([FromQuery] string query, [FromQuery] string language, [FromQuery] string user)
     {
         var results = await _gitHubService.SearchRepositories(query, language, user);
         return Ok(results.Items);
     }
-
 }
